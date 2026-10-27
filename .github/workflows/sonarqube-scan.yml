@@ -1,0 +1,54 @@
+name: SonarQube scan
+
+on:
+  workflow_call:
+    inputs:
+      project-key:
+        description: SonarQube project key. Defaults to the repository name.
+        type: string
+        required: false
+        default: ''
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      SONAR_WAKE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: wake
+        timeout-minutes: 15
+        env:
+          SONAR_WAKE_KEY: ${{ secrets.SONAR_WAKE_KEY }}
+        run: |
+          until printf 'header = "X-Sonar-Wake-Key: %s"\n' "$SONAR_WAKE_KEY" |
+            curl -sS --max-time 10 -K - https://sonar.sebastiansuarez.dev/api/system/status |
+            grep -Eq '"status" *: *"UP"'; do
+            sleep 5
+          done
+      - id: heartbeat
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          while :; do
+            printf 'header = "Authorization: Bearer %s"\n' "$SONAR_TOKEN" |
+              curl -sS -o /dev/null --max-time 30 -K - https://sonar.sebastiansuarez.dev/api/users/current || true
+            sleep 300
+          done >/dev/null 2>&1 &
+      - id: scan
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_HOST_URL: https://sonar.sebastiansuarez.dev
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: -Dsonar.projectKey=${{ inputs.project-key || github.event.repository.name }}

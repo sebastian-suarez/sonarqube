@@ -1,0 +1,19 @@
+{
+  "baseline": {
+    "at": "2026-10-27T16:53:56Z",
+    "command": "bash tests/run-acceptance.sh",
+    "exit_code": 1
+  },
+  "spec_sha256": "05a808bb64d56b54b4d6549830470e7de80bc72033acad4a9b8e93f063a55ff3",
+  "spec_version": "4",
+  "tests": {
+    "infra/tests/acceptance.tftest.hcl": "7f7f4b619fae38252fa2bdbe6ee6df27f5f3b8ab1f22d46575668d8feb5ae7f0",
+    "infra/tests/bootstrap.tftest.hcl": "0b0ad69574f2dcf37978cfff394cce2fedfac7d93861d0cf297648f24f1b87ea",
+    "instance/tests/test_idle.py": "a9a733284c45c39f63b812f00f93ea0cac8402ef70a994d4906f63ecc3660bff",
+    "tests/CONTRACT.md": "0161ebbeaeaf051d39cdd59414f4ace364e61eb7608e7ee1b2a7205d3f48f430",
+    "tests/run-acceptance.sh": "cd88964dbfcd10c4ab24225022ac42115e5e47f752d4c91f1eb354e699473712",
+    "tests/scripts/test_scripts.py": "9a671aa2627bf61e0e5da05411c6e814704c6e846de3d051f6b8a2968a0687bc",
+    "tests/workflow/test_workflow.py": "560610a650b7179161e22a072c82706b2694ef6d779fdf1bf5953f74039d5067",
+    "worker/test/acceptance.test.js": "c0b29b4abca3a6e1f2d1a3f6403b3743081e46b2752173559353c0a8d8eebabf"
+  }
+}

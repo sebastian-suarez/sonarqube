@@ -1,0 +1,62 @@
+# Log: sonarqube-platform
+
+Verification runs and review rounds, without model names; the models that served each run are logged under `~/.cache/routing/`.
+
+- 2026-10-26: spec drafted.
+- 2026-10-26: attack: verdict needs-attention, 4 finding(s).
+- 2026-10-26: Cloudflare zone `sebastiansuarez.dev` verified active (zone ID ed1796dc7261c72ff630e77a212d03ff); no `sonar` record exists.
+- 2026-10-26: user confirmed the two proposed decisions (activity counts only signed-in callers; SSM SecureString and pinned images).
+- 2026-10-26: attack round 1, 4 findings, all verified and accepted by the user. Finding 1 was checked against the managed policy's current version, and finding 4 against SonarQube's `sonar.properties` and `JwtSerializer`. Folded in: A10, A11, A12, B2–B8, C1–C8, D2–D8, E2, E5, E6, F1, F3, G4, G6, plus the decisions.
+- 2026-10-26: attack round 2 (fixes only): verdict needs-attention, 2 medium findings, both verified and accepted by the user. Folded in: heartbeat (Definitions, D4, D9, E7, G7) and the wake-key refresh (D7). Round 1's four fixes were judged addressed. This was the last attack round.
+- 2026-10-26: user said go; spec frozen.
+- 2026-10-26: suite-ready step: the coding.tests writer stopped with no files written (vendor out of usage credits). The user chose the coding.overflow writer for the acceptance suite, and implementation moved from coding.feature to coding.default, so tests and code come from different vendors. A provider mirror was set up for the sandboxed writer, with the pins recorded in plan.md.
+- 2026-10-26: acceptance suite written by the coding.overflow writer (8 protected files, contract in `tests/CONTRACT.md`). Hub verification:
+  - the baseline `bash tests/run-acceptance.sh` exits 1, with all groups A–F failing on "implementation missing" guards only
+  - all 194 resource and data-source attribute references in `infra/tests/*.tftest.hcl` resolve against the pinned provider schemas
+  - with dummy no-op implementations in a scratch copy, the C and D harnesses (HTTP stub, command stubs, process-group checks) run with assertion failures only, the worker harness runs 38 tests, and the B7 SigV4 checker passes AWS's published AKIDEXAMPLE vector
+  - provenance grep is clean
+- 2026-10-26: `spec.sh ready`: suite-ready, baseline exit 1, `spec.sh check` passes.
+- 2026-10-26: wave 1 (coding.default, three parallel worktrees) merged: Worker (B 38/38), instance boot and idle checker (C 9/9, shellcheck clean), scripts, workflow and README (D 13/13, E 6/6, shellcheck and actionlint clean). The hub re-ran every group in each worktree before merging.
+- 2026-10-26: wave 2 (infra) found that the protected A12 and F2 runs could never evaluate at `command = plan`: OpenTofu defers the tunnel-token data source while the tunnel is pending creation. Reproduced by the hub (9 passed, 1 failed, 6 skipped). The user approved switching both runs to `command = apply` under the same mock providers, plus the matching CONTRACT line; the spec is unchanged. The locals-alias workaround was rejected because it only dodges OpenTofu's dependency rule. Suite invalidated, fixed, and re-recorded with `spec.sh ready` (baseline taken without the infra files, exit 1).
+- 2026-10-26: full verification on main at b6431c7: `bash tests/run-acceptance.sh` exits 0, with PASS for every group A–F (`tofu test` 16 passed, 0 failed). Provenance and secret greps are clean. Status: implemented.
+- 2026-10-26: review round 1 on frozen dc69bdd..b6431c7. Task reviewer: needs-attention, 1 high. Artifact reviewer (degraded: the max-effort artifact-reviewer row, because the primary and the stand-in were both unavailable): needs-attention, 1 high, 1 medium, 9 low. Verified:
+  - heartbeat endpoint (task high, artifact medium): confirmed in `UserSessionInitializer.SKIPPED_URLS`. It contradicted the spec, so the user approved version 2.
+  - artifact high, read-only scanner mount: rejected. The scanner image sets `SCANNER_WORKDIR_PATH=/tmp/.scannerwork`, and `bin/entrypoint.sh:44` maps it to `sonar.working.directory`.
+  - artifact low #3, tunnel token in argv: rejected. The protected F1 test requires `--token`, and only root on the instance can see it.
+  - artifact lows #4, #9, #10, #11 noted, not fixed.
+  - artifact lows #5, #6, #7, #8 accepted by the user for this round.
+- 2026-10-26: version 2 (heartbeat via `/api/users/current`). Focused attack on the change only: verdict approve, 0 findings. Tests D9, E7, the stub and CONTRACT updated to match.
+- 2026-10-26: round 1 fixes committed (3046a5b): heartbeat endpoint, cloudflared Restart, IMDS hop limit 1, Aurora engine_version ignore_changes, README notes. Full suite exits 0 with PASS for A–F. Status: implemented.
+- 2026-10-26: review round 2 (fixes and rejections only) on frozen b6431c7..3046a5b.
+  - Task reviewer: approve, 0 findings.
+  - Artifact reviewer (degraded max-effort row again): pass. All five fixes judged correct, and rejections 1 and 3 upheld.
+  - Correction to the round 1 log: rejection 3's reason "only root can see it" was wrong, because `/proc/<pid>/cmdline` is world-readable on AL2023. The outcome stands: the protected F1 test requires `--token`, and the instance has no other accounts (the Session Manager user has sudo). Closing it means `ExecStart=cloudflared tunnel run` plus a test change.
+  - Its 2 low README findings (engine upgrade path; keeping the cost tag active on teardown) were applied as hub edits.
+- 2026-10-26: offline verification complete and both review rounds passed. Status: verified. Open before done: tasks 8–10 (apply, live checks G1–G7, GitHub repo and onboarding), each needing the user's go.
+- 2026-10-27: first live deploy. Bootstrap and main apply succeeded (57 resources, including the cost allocation tag on the first try), and a second plan was empty. G4 passed at 11:49Z: three requests with no credentials, a forged `Authorization` and a forged `JWT-SESSION` each got 503 `DOWN`, and desired capacity was still 0 after 65 s. The first wake (wake key, 11:51Z) scaled the group to 1, but the instance never came `UP`. The organization's declarative policy `ec2-baseline` had turned on VPC Block Public Access (`block_bidirectional`) at 00:04Z, so the instance had no internet egress (the SSM agent timed out reaching `ssm.us-east-1.amazonaws.com`). The hub set desired capacity back to 0.
+- 2026-10-27: version 3. Focused attack round 1 on an `allow-egress` VPC exclusion: needs-attention, 1 high finding (egress-only exclusions don't cover a public-IP instance behind an internet gateway). Accepted after checking AWS's VPC BPA advanced example, scenario 6. With the user's approval, A16 changed to `allow-bidirectional` exclusions per public subnet. Attack round 2: approve, 0 findings.
+- 2026-10-27: version 3 implemented (3aecfa2), and the full suite passes (A–F; infra 17 passed). The A16 test was proven by the hub on scratch copies: it passes with the correct resource and fails for `allow-egress`, for a map over the private subnets, and for an extra VPC-level exclusion.
+- 2026-10-27: review round 1 on frozen 12a92a6..3aecfa2.
+  - Task reviewer: approve, 0 findings.
+  - Artifact reviewer (the degraded max-effort row, because the usual reviewer and its stand-in are unavailable until 2026-10-28): pass. 2 low findings, left open for the user: (1) nothing makes the group wait for the exclusions, so a failed exclusion still leaves a group whose wake boots an instance with no egress; suggested fix `depends_on` on the group. (2) the provider can't see an exclusion the organization later disables; suggested fix a README troubleshooting line.
+- 2026-10-27: 6 exclusions applied (`allow-bidirectional`, one per public subnet; 3–4 minutes each).
+- 2026-10-27: version 4 (dedicated `sonarqube` account, profile pinning, Resource Group, cost tag out of the stack). Focused attack: approve, 0 findings.
+- 2026-10-27: management-account teardown. The cost allocation tag was taken out of the old state (it stays `Active` for the organization), deletion protection was turned off, and the old stack was destroyed (62 resources). The final snapshot `sonarqube-final` and the old state bucket were deleted. Afterwards no Auto Scaling group, Aurora cluster or snapshot remained in the management account. The `sonarqube` member account (368861736633) was created in OU `Workloads`, and `Admins` got `AdministratorAccess` on it. The AWS MCP server is bound to the management account, so live work in the new account uses the AWS CLI with `--profile sonarqube`.
+- 2026-10-27: version 4. The suite was regenerated and recorded (baseline exit 1: A, D and F fail where expected; the hub ran the tofu runs, because the writer's sandbox can't start providers). Implemented in 4162987, and the full suite passes (A–F; infra 18 passed).
+- 2026-10-27: review round 1 on frozen 4f55e63..4162987.
+  - Task reviewer: approve, 0 findings.
+  - Artifact reviewer (the degraded max-effort row): pass, 5 low findings. Its blinding slipped once: a broken grep printed about nine lines of the spec and contract. It says its findings rest only on the diff, the repo and the docs.
+  - Applied as hub edits: `allowed_account_ids` in the S3 backend, so state-only commands also refuse the wrong account (L1). The README cost-tag paragraph now has the check and activation commands and the $0 warning (L2). `AGENTS.md` updated (L5).
+  - L4, the stale local backend cache, is handled by `init -reconfigure` at deploy.
+  - Open (L3): the README's manual snapshot and bucket-emptying steps have no written-out `--profile sonarqube` commands.
+- 2026-10-27: version 4 deployed to the `sonarqube` account. The bootstrap state bucket and the main stack were created (63 resources), and a second plan was empty. The Resource Group lists 41 resources. The 6 exclusions are `create-complete`, and the account inherits `block-bidirectional` from the organization's policy.
+- 2026-10-27: G4 passed at 17:26Z: no credentials, a forged `Authorization` and a forged `JWT-SESSION` each got 503 `DOWN`, and desired capacity was 0 with no instances 66 s later.
+- 2026-10-27: first cold start: `UP` 234 s after a wake-key request (17:28Z), and the boot gate held (`change_password` as `admin` over localhost before any request through the tunnel).
+- 2026-10-27: G7 passed at 17:32Z: during `scan.sh` on `react-template`, the heartbeat (`GET /api/users/current`) and every scanner call logged `LOGIN` = `admin`, the token's owner. The scan finished with `EXECUTION SUCCESS` in 46 s.
+- 2026-10-27: G2 passed at 17:46Z: the instance was ended without lowering desired capacity, and a replacement in another AZ (us-east-1b to us-east-1d) reported `UP` after 207 s. The `react-template` analysis was still listed.
+- 2026-10-27: G3 passed: after the last authenticated request (17:49:51Z), the instance set desired capacity to 0 at 18:25:46Z (35 minutes; the limit is 40). Aurora `ServerlessDatabaseCapacity` reached 0 at 18:32:56Z (7 minutes later; the limit is 15).
+- 2026-10-27: G6 passed: the user's signed-in Safari session opened H with the group at 0. The Worker (seen in its live tail) answered 503 `WAKING` and set desired capacity to 1 at 18:40:40Z. SonarQube was `UP` 172 s later, and the browser was still signed in as `admin`. The user's first attempt a few minutes earlier never reached the Worker (no wake, no group activity). Cause unknown, most likely a Safari or network failure; it didn't happen again.
+- 2026-10-27: G1 passed: with the group set to 0 and no instances, `scan.sh` on a clean `react-template` checkout woke the server and finished with `EXECUTION SUCCESS` 228 s after it started (the limit is 15 minutes). The new analysis (18:48:52Z) is listed next to the 17:32Z one.
+- 2026-10-27: observation, not a failure: two requests from the owner's Mac (Safari's first G6 attempt, and a curl at 18:45:16Z) hit a TCP connection timeout to Cloudflare's edge. Neither appears in the Worker's live tail, so neither reached the Worker. Both worked on retry, and IPv4 and IPv6 connected in about 0.06 s afterwards. Unexplained, and treated as a client-side network blip. `wake.sh` retries every 5 s, so scripts ride over it.
+- 2026-10-27: live checks G1–G4, G6 and G7 passed in the `sonarqube` account. G5 (task 10: public GitHub repo, push, onboard one repo) is pending the user's go.
+- 2026-10-27: published as a single initial commit. The commit SHAs cited in this log refer to the pre-publication history, which is kept only on the owner's local branch `pre-publication`.

@@ -1,0 +1,13 @@
+name: SonarQube
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sonarqube:
+    uses: sebastian-suarez/sonarqube/.github/workflows/sonarqube-scan.yml@main
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_WAKE_KEY: ${{ secrets.SONAR_WAKE_KEY }}
